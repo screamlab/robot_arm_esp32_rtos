@@ -4,7 +4,6 @@
 #include <rclc/executor.h>
 #include <rclc/rclc.h>
 #include <std_msgs/msg/int32.h>
-#include <trajectory_msgs/msg/joint_trajectory.h>
 #include <trajectory_msgs/msg/joint_trajectory_point.h>
 
 #include "armDriver.h"
@@ -55,24 +54,29 @@ enum states {
     AGENT_DISCONNECTED
 } state;
 
+uint8_t targetAngles[NUM_OF_SERVOS];
+float currentAngles[NUM_OF_SERVOS];
+TaskHandle_t mainTask, armControlTask;
+
 void subscription_callback(const void* msgin) {
     const trajectory_msgs__msg__JointTrajectoryPoint* msg = (const trajectory_msgs__msg__JointTrajectoryPoint*)msgin;
 
     // Initialize the ArmManager
-    ArmManager arm_manager(NUM_OF_SERVOS, servoMinAngles, servoMaxAngles, servoInitAngles);
+    // ArmManager arm_manager(NUM_OF_SERVOS, servoMinAngles, servoMaxAngles, servoInitAngles);
 
     // Error handling: Check if the size matches the number of servos
-    if (msg->positions.size != NUM_OF_SERVOS) {
+    if (msg->positions.capacity != (size_t)NUM_OF_SERVOS) {
         return;
     }
 
-    // Set the target angles for each servo and log them
+    // Set the target angles for each servo
     for (size_t i = 0; i < NUM_OF_SERVOS; i++) {
-        arm_manager.setServoTargetAngle(i, (uint8_t)(msg->positions.data[i] * RAD_TO_DEG));
+        // arm_manager.setServoTargetAngle(i, (uint8_t)(msg->positions.data[i] * RAD_TO_DEG));
+        targetAngles[i] = (uint8_t)(degrees(msg->positions.data[i]));
     }
 
     // Move the arm and log the action
-    arm_manager.moveArm();
+    // arm_manager.moveArm();
 }
 
 bool create_entities() {
@@ -91,6 +95,10 @@ bool create_entities() {
         ROSIDL_GET_MSG_TYPE_SUPPORT(trajectory_msgs, msg, JointTrajectoryPoint),
         "/right_arm"));
 
+    msg.positions.capacity = NUM_OF_SERVOS;  // The number of allocated items in data
+    msg.positions.size = 0;                  // The number of valid items in data
+    msg.positions.data = (double*)malloc(msg.positions.capacity * sizeof(double));
+
     // create executor
     RCCHECK(rclc_executor_init(&executor, &support.context, 1, &allocator));
     RCCHECK(rclc_executor_add_subscription(&executor, &subscriber, &msg, &subscription_callback, ON_NEW_DATA));
@@ -107,19 +115,12 @@ void destroy_entities() {
     RCSOFTCHECK(rclc_executor_fini(&executor));
     RCSOFTCHECK(rcl_node_fini(&node));
     RCSOFTCHECK(rclc_support_fini(&support));
+
+    free(msg.positions.data);
+    msg.positions.data = nullptr;
 }
 
-void setup() {
-    // Configure serial transport
-    Serial.begin(115200);
-    set_microros_serial_transports(Serial);
-
-    state = WAITING_AGENT;
-}
-
-void loop() {
-    static bool connected = false;
-
+void rosSubscriptionTaskFunction(void* parameter) {
     switch (state) {
         case WAITING_AGENT:
             EXECUTE_EVERY_N_MS(500, state = (RMW_RET_OK == rmw_uros_ping_agent(100, 1)) ? AGENT_AVAILABLE : WAITING_AGENT;);
@@ -143,4 +144,61 @@ void loop() {
         default:
             break;
     }
+}
+
+// Task function for arm control
+void armControlTaskFunction(void* parameter) {
+    // Create an instance of ArmManager
+
+    // uint8_t currentAngles[ArmManager::NUM_SERVOS];
+    ArmManager armManager(NUM_OF_SERVOS, servoMinAngles, servoMaxAngles, servoInitAngles);
+
+    Serial.println("armControlTaskFunction start");
+
+    for (;;) {
+        // Control the robot arm using ArmManager
+        for (uint8_t i = 0; i < NUM_OF_SERVOS; i++) {
+            armManager.setServoTargetAngle(i, targetAngles[i]);
+        }
+
+        armManager.moveArm();
+        // armManager.printStatus();
+        armManager.getCurrentAngles(currentAngles);
+
+        // Wait for some time before the next iteration
+        vTaskDelay(UPDATE_ARM_DELAY / portTICK_PERIOD_MS);
+    }
+}
+
+void setup() {
+    // Configure serial transport
+    Serial.begin(115200);
+    set_microros_serial_transports(Serial);
+
+    state = WAITING_AGENT;
+
+    // delay(100);
+    // xTaskCreatePinnedToCore(
+    //     rosSubscriptionTaskFunction,  // Task function
+    //     "ROS Subscription",           // Task name
+    //     2048,                         // Stack size (in bytes)
+    //     NULL,                         // Task parameters
+    //     1,                            // Task priority
+    //     &mainTask,                    // Task handle
+    //     0                             // Core ID (0 or 1)
+    // );
+    // delay(100);
+    // xTaskCreatePinnedToCore(
+    //     armControlTaskFunction,  // Task function
+    //     "Arm Control Task",      // Task name
+    //     2048,                    // Stack size (in bytes)
+    //     NULL,                    // Task parameters
+    //     1,                       // Task priority
+    //     &armControlTask,         // Task handle
+    //     1                        // Core ID (0 or 1)
+    // );
+}
+
+void loop() {
+    rosSubscriptionTaskFunction(NULL);
 }
