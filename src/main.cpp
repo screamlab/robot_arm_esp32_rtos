@@ -13,13 +13,19 @@
 #error This example is only avaliable for Arduino framework with serial transport.
 #endif
 
+rcl_allocator_t allocator;
+rclc_support_t support;
+rcl_node_t node;
+
+// subscriber
 rcl_subscription_t subscriber;
 trajectory_msgs__msg__JointTrajectoryPoint msg;
+rclc_executor_t executor_sub;
 
-rclc_executor_t executor;
-rclc_support_t support;
-rcl_allocator_t allocator;
-rcl_node_t node;
+// publisher
+rcl_publisher_t publisher;
+std_msgs__msg__Int32 msg2;
+rclc_executor_t executor_pub;
 rcl_timer_t timer;
 
 #define RCCHECK(fn)                    \
@@ -59,24 +65,34 @@ float currentAngles[NUM_OF_SERVOS];
 TaskHandle_t mainTask, armControlTask;
 
 void subscription_callback(const void* msgin) {
-    const trajectory_msgs__msg__JointTrajectoryPoint* msg = (const trajectory_msgs__msg__JointTrajectoryPoint*)msgin;
+    // const trajectory_msgs__msg__JointTrajectoryPoint* msg = (const trajectory_msgs__msg__JointTrajectoryPoint*)msgin;
 
     // Initialize the ArmManager
     // ArmManager arm_manager(NUM_OF_SERVOS, servoMinAngles, servoMaxAngles, servoInitAngles);
 
     // Error handling: Check if the size matches the number of servos
-    if (msg->positions.capacity != (size_t)NUM_OF_SERVOS) {
-        return;
-    }
+    // if (msg.positions.capacity != (size_t)NUM_OF_SERVOS) {
+    //     return;
+    // }
 
     // Set the target angles for each servo
-    for (size_t i = 0; i < NUM_OF_SERVOS; i++) {
+    Serial.println("Recived servo angles:");
+    for (size_t i = 0; i < msg.positions.capacity; ++i) {
         // arm_manager.setServoTargetAngle(i, (uint8_t)(msg->positions.data[i] * RAD_TO_DEG));
-        targetAngles[i] = (uint8_t)(degrees(msg->positions.data[i]));
+        targetAngles[i] = (uint8_t)(degrees(msg.positions.data[i]));
+        Serial.print(targetAngles[i]);
     }
 
     // Move the arm and log the action
     // arm_manager.moveArm();
+}
+
+void publisher_callback(rcl_timer_t* timer, int64_t last_call_time) {
+    RCLC_UNUSED(last_call_time);
+    RCLC_UNUSED(timer);
+
+    msg2.data = (int32_t)targetAngles[0];
+    RCSOFTCHECK(rcl_publish(&publisher, &msg2, NULL));
 }
 
 bool create_entities() {
@@ -96,12 +112,39 @@ bool create_entities() {
         "/right_arm"));
 
     msg.positions.capacity = NUM_OF_SERVOS;  // The number of allocated items in data
-    msg.positions.size = 0;                  // The number of valid items in data
+    msg.positions.size = NUM_OF_SERVOS;      // The number of valid items in data
     msg.positions.data = (double*)malloc(msg.positions.capacity * sizeof(double));
+    msg.velocities.capacity = 0;
+    msg.velocities.size = 0;
+    msg.velocities.data = nullptr;
+    msg.accelerations.capacity = 0;
+    msg.accelerations.size = 0;
+    msg.accelerations.data = nullptr;
+    msg.effort.capacity = 0;
+    msg.effort.size = 0;
+    msg.effort.data = nullptr;
 
-    // create executor
-    RCCHECK(rclc_executor_init(&executor, &support.context, 1, &allocator));
-    RCCHECK(rclc_executor_add_subscription(&executor, &subscriber, &msg, &subscription_callback, ON_NEW_DATA));
+    // create subscriber executor
+    RCCHECK(rclc_executor_init(&executor_sub, &support.context, 1, &allocator));
+    RCCHECK(rclc_executor_add_subscription(&executor_sub, &subscriber, &msg, &subscription_callback, ON_NEW_DATA));
+
+    // create publisher
+    RCCHECK(rclc_publisher_init_default(
+        &publisher,
+        &node,
+        ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
+        "/right_arm_2"));
+
+    // Initialize a timer for publishing
+    RCCHECK(rclc_timer_init_default(
+        &timer,
+        &support,
+        RCL_MS_TO_NS(100),  // Timer period in nanoseconds (100 ms)
+        publisher_callback));
+
+    // create publisher executor
+    RCCHECK(rclc_executor_init(&executor_pub, &support.context, 1, &allocator));
+    RCCHECK(rclc_executor_add_timer(&executor_pub, &timer));
 
     return true;
 }
@@ -110,14 +153,21 @@ void destroy_entities() {
     rmw_context_t* rmw_context = rcl_context_get_rmw_context(&support.context);
     (void)rmw_uros_set_context_entity_destroy_session_timeout(rmw_context, 0);
 
+    // subscriber
     RCSOFTCHECK(rcl_subscription_fini(&subscriber, &node));
-    RCSOFTCHECK(rcl_timer_fini(&timer));
-    RCSOFTCHECK(rclc_executor_fini(&executor));
-    RCSOFTCHECK(rcl_node_fini(&node));
-    RCSOFTCHECK(rclc_support_fini(&support));
+    RCSOFTCHECK(rclc_executor_fini(&executor_sub));
 
     free(msg.positions.data);
     msg.positions.data = nullptr;
+
+    // publisher
+    RCSOFTCHECK(rcl_publisher_fini(&publisher, &node));
+    RCSOFTCHECK(rcl_timer_fini(&timer));
+    RCSOFTCHECK(rclc_executor_fini(&executor_pub));
+
+    // common
+    RCSOFTCHECK(rcl_node_fini(&node));
+    RCSOFTCHECK(rclc_support_fini(&support));
 }
 
 void rosSubscriptionTaskFunction(void* parameter) {
@@ -134,7 +184,7 @@ void rosSubscriptionTaskFunction(void* parameter) {
         case AGENT_CONNECTED:
             EXECUTE_EVERY_N_MS(200, state = (RMW_RET_OK == rmw_uros_ping_agent(100, 1)) ? AGENT_CONNECTED : AGENT_DISCONNECTED;);
             if (state == AGENT_CONNECTED) {
-                rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100));
+                rclc_executor_spin_some(&executor_sub, RCL_MS_TO_NS(100));
             }
             break;
         case AGENT_DISCONNECTED:

@@ -16,4 +16,9 @@ We need the following items.
 3. Right-click the `silabser.inf` and select "install".
 
 
+# Note
+
+## Subscribe and then Publish
+
+https://github.com/botamochi6277/micro_ros_arduino_pub_sub_example/blob/main/src/main.cpp
 
