@@ -7,6 +7,9 @@
 #include <std_msgs/msg/int32.h>
 #include <trajectory_msgs/msg/joint_trajectory_point.h>
 
+#include <armDriver.hpp>
+#include <params.hpp>
+
 #if !defined(MICRO_ROS_TRANSPORT_ARDUINO_SERIAL)
 #error This example is only avaliable for Arduino framework with serial transport.
 #endif
@@ -26,7 +29,8 @@ trajectory_msgs__msg__JointTrajectoryPoint msg_pub;
 rclc_executor_t executor_pub;
 rcl_timer_t timer;
 
-double joint_positions[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+double joint_positions[NUM_OF_SERVOS] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+ArmManager *armManager;
 
 #define RCCHECK(fn)                    \
     {                                  \
@@ -63,8 +67,10 @@ enum states {
 void subscription_callback(const void* msgin) {
     const trajectory_msgs__msg__JointTrajectoryPoint* msg = (const trajectory_msgs__msg__JointTrajectoryPoint*)msgin;
     for (size_t i = 0; i < msg->positions.size; i++) {
-        joint_positions[i] = msg->positions.data[i];
+        joint_positions[i] = degrees(msg->positions.data[i]);
+        armManager->setServoTargetAngle(i, uint8_t(joint_positions[i]));
     }
+    armManager->moveArm();
 }
 
 void timer_callback(rcl_timer_t* timer, int64_t last_call_time) {
@@ -72,7 +78,7 @@ void timer_callback(rcl_timer_t* timer, int64_t last_call_time) {
     if (timer != NULL) {
         RCSOFTCHECK(rcl_publish(&publisher, &msg_pub, NULL));
         for (size_t i = 0; i < msg_pub.positions.capacity; i++) {
-            msg_pub.positions.data[i] = degrees(joint_positions[i]);
+            msg_pub.positions.data[i] = joint_positions[i];
         }
     }
 }
@@ -98,8 +104,8 @@ bool create_entities() {
         ROSIDL_GET_MSG_TYPE_SUPPORT(trajectory_msgs, msg, JointTrajectoryPoint),
         "/right_arm"));
     
-    msg_sub.positions.capacity = 6;
-    msg_sub.positions.size = 6;
+    msg_sub.positions.capacity = NUM_OF_SERVOS;
+    msg_sub.positions.size = NUM_OF_SERVOS;
     msg_sub.positions.data = (double*)calloc(msg_sub.positions.capacity, sizeof(double));
 
     // create subscriber executor
@@ -121,13 +127,16 @@ bool create_entities() {
         RCL_MS_TO_NS(timer_timeout),  // Timer period in nanoseconds
         timer_callback));
     
-    msg_pub.positions.capacity = 6;
-    msg_pub.positions.size = 6;
+    msg_pub.positions.capacity = NUM_OF_SERVOS;
+    msg_pub.positions.size = NUM_OF_SERVOS;
     msg_pub.positions.data = (double*)calloc(msg_pub.positions.capacity, sizeof(double));
 
     // create executor
     RCCHECK(rclc_executor_init(&executor_pub, &support.context, 1, &allocator));
     RCCHECK(rclc_executor_add_timer(&executor_pub, &timer));
+
+    // create arm manager
+    armManager = new ArmManager(uint8_t(NUM_OF_SERVOS), servoMinAngles, servoMaxAngles, servoInitAngles);
 
     return true;
 }
@@ -154,12 +163,15 @@ void destroy_entities() {
     // common
     RCSOFTCHECK(rcl_node_fini(&node));
     RCSOFTCHECK(rclc_support_fini(&support));
+
+    // destroy arm manager
+    delete armManager;
 }
 
 void rosSubscriptionTaskFunction(void* parameter) {
     switch (state) {
         case WAITING_AGENT:
-            EXECUTE_EVERY_N_MS(500, state = (RMW_RET_OK == rmw_uros_ping_agent(100, 1)) ? AGENT_AVAILABLE : WAITING_AGENT;);
+            EXECUTE_EVERY_N_MS(500, state = (RMW_RET_OK == rmw_uros_ping_agent(500, 1)) ? AGENT_AVAILABLE : WAITING_AGENT;);
             break;
         case AGENT_AVAILABLE:
             state = (true == create_entities()) ? AGENT_CONNECTED : WAITING_AGENT;
@@ -168,7 +180,7 @@ void rosSubscriptionTaskFunction(void* parameter) {
             };
             break;
         case AGENT_CONNECTED:
-            EXECUTE_EVERY_N_MS(200, state = (RMW_RET_OK == rmw_uros_ping_agent(100, 1)) ? AGENT_CONNECTED : AGENT_DISCONNECTED;);
+            EXECUTE_EVERY_N_MS(200, state = (RMW_RET_OK == rmw_uros_ping_agent(500, 1)) ? AGENT_CONNECTED : AGENT_DISCONNECTED;);
             if (state == AGENT_CONNECTED) {
                 rclc_executor_spin_some(&executor_sub, RCL_MS_TO_NS(100));
                 rclc_executor_spin_some(&executor_pub, RCL_MS_TO_NS(100));
