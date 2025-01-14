@@ -5,11 +5,10 @@
  * Pin : use I2C , SDA 21 SCL 22
  *
  */
-const float ARM_MOVEMENT_STEP = 0.3;
+const float ARM_MOVEMENT_STEP = 1.0;
 
 class ArmManager {
    private:
-    // static const uint8_t this->numServos = 8;
     static const uint16_t SERVO_MIN_PULSE_WIDTH = 500;
     static const uint16_t SERVO_MAX_PULSE_WIDTH = 2500;
 
