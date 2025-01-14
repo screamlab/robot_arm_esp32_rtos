@@ -72,7 +72,7 @@ void timer_callback(rcl_timer_t* timer, int64_t last_call_time) {
     if (timer != NULL) {
         RCSOFTCHECK(rcl_publish(&publisher, &msg_pub, NULL));
         for (size_t i = 0; i < msg_pub.positions.capacity; i++) {
-            msg_pub.positions.data[i] = joint_positions[i];
+            msg_pub.positions.data[i] = degrees(joint_positions[i]);
         }
     }
 }
