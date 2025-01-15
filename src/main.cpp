@@ -29,8 +29,8 @@ trajectory_msgs__msg__JointTrajectoryPoint msg_pub;
 rclc_executor_t executor_pub;
 rcl_timer_t timer;
 
+// Global variables shared between the microROS task and the arm control task
 double joint_positions[NUM_OF_SERVOS] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-ArmManager *armManager = nullptr;
 
 #define RCCHECK(fn)                    \
     {                                  \
@@ -66,11 +66,9 @@ enum states {
 
 void subscription_callback(const void *msgin) {
     const trajectory_msgs__msg__JointTrajectoryPoint *msg = (const trajectory_msgs__msg__JointTrajectoryPoint *)msgin;
-    for (size_t i = 0; i < msg->positions.size; i++) {
+    for (size_t i = 0; i < msg->positions.size; ++i) {
         joint_positions[i] = degrees(msg->positions.data[i]);
-        armManager->setServoTargetAngle(i, uint8_t(joint_positions[i]));
     }
-    armManager->moveArm();
 }
 
 void timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
@@ -117,7 +115,7 @@ bool create_entities() {
         &publisher,
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(trajectory_msgs, msg, JointTrajectoryPoint),
-        "/right_arm_2"));
+        "/right_arm_republish"));
 
     // create timer, this timer sets the period for publishing data.
     const unsigned int timer_timeout = 50;
@@ -134,9 +132,6 @@ bool create_entities() {
     // create executor
     RCCHECK(rclc_executor_init(&executor_pub, &support.context, 1, &allocator));
     RCCHECK(rclc_executor_add_timer(&executor_pub, &timer));
-
-    // create arm manager
-    armManager = new ArmManager(uint8_t(NUM_OF_SERVOS), servoMinAngles, servoMaxAngles, servoInitAngles);
 
     return true;
 }
@@ -163,13 +158,9 @@ void destroy_entities() {
     // common
     RCSOFTCHECK(rcl_node_fini(&node));
     RCSOFTCHECK(rclc_support_fini(&support));
-
-    // destroy arm manager
-    delete armManager;
-    armManager = nullptr;
 }
 
-void rosSubscriptionTaskFunction(void *parameter) {
+void microROSTaskFunction(void *parameter) {
     // Use inifiite loop to keep the task running like the void loop() function in Arduino framework.
     while (true) {
         switch (state) {
@@ -199,6 +190,20 @@ void rosSubscriptionTaskFunction(void *parameter) {
     }
 }
 
+void armControlTaskFunction(void *parameter) {
+    ArmManager armManager(uint8_t(NUM_OF_SERVOS), servoMinAngles, servoMaxAngles, servoInitAngles);
+
+    while (true) {
+        for (size_t i = 0; i < NUM_OF_SERVOS; ++i) {
+            armManager.setServoTargetAngle(i, uint8_t(joint_positions[i]));
+        }
+        armManager.moveArm();
+
+        // Wait for some time before the next iteration
+        vTaskDelay(UPDATE_ARM_DELAY / portTICK_PERIOD_MS);
+    }
+}
+
 void setup() {
     // Configure serial transport
     Serial.begin(115200);
@@ -207,14 +212,29 @@ void setup() {
 
     state = WAITING_AGENT;
 
+    // Initialize joint_positions with the initial angles
+    for (size_t i = 0; i < NUM_OF_SERVOS; ++i) {
+        joint_positions[i] = double(servoInitAngles[i]);
+    }
+
     xTaskCreate(
-        rosSubscriptionTaskFunction,  // Task function
-        "Micro ROS Task",             // Task name
-        8192,                         // Stack size (in bytes)
-        NULL,                         // Task parameters
-        configMAX_PRIORITIES - 1,     // Task priority
-        NULL                          // Task handle
+        microROSTaskFunction,      // Task function
+        "Micro ROS Task",          // Task name
+        8192,                      // Stack size (in bytes)
+        NULL,                      // Task parameters
+        configMAX_PRIORITIES - 1,  // Task priority
+        NULL                       // Task handle
     );
+    delay(100);
+    xTaskCreate(
+        armControlTaskFunction,  // Task function
+        "Arm Control Task",      // Task name
+        4096,                    // Stack size (in bytes)
+        NULL,                    // Task parameters
+        1,                       // Task priority
+        NULL                     // Task handle
+    );
+    delay(100);
 }
 
 void loop() {
