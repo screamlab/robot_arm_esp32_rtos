@@ -25,6 +25,5 @@ board_microros_transport = serial
 lib_deps = 
     https://github.com/micro-ROS/micro_ros_platformio
     https://github.com/adafruit/Adafruit-PWM-Servo-Driver-Library
-    https://github.com/bblanchon/ArduinoJson
 monitor_speed = 115200
 lib_ldf_mode = deep+
