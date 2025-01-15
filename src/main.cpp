@@ -30,7 +30,7 @@ rclc_executor_t executor_pub;
 rcl_timer_t timer;
 
 double joint_positions[NUM_OF_SERVOS] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-ArmManager *armManager;
+ArmManager *armManager = nullptr;
 
 #define RCCHECK(fn)                    \
     {                                  \
@@ -150,7 +150,7 @@ void destroy_entities() {
     RCSOFTCHECK(rclc_executor_fini(&executor_sub));
 
     free(msg_sub.positions.data);
-    msg_sub.positions.data = nullptr;
+    msg_sub.positions.data = NULL;
 
     // publisher
     RCSOFTCHECK(rcl_publisher_fini(&publisher, &node));
@@ -158,7 +158,7 @@ void destroy_entities() {
     RCSOFTCHECK(rclc_executor_fini(&executor_pub));
 
     free(msg_pub.positions.data);
-    msg_pub.positions.data = nullptr;
+    msg_pub.positions.data = NULL;
 
     // common
     RCSOFTCHECK(rcl_node_fini(&node));
@@ -166,32 +166,36 @@ void destroy_entities() {
 
     // destroy arm manager
     delete armManager;
+    armManager = nullptr;
 }
 
 void rosSubscriptionTaskFunction(void *parameter) {
-    switch (state) {
-        case WAITING_AGENT:
-            EXECUTE_EVERY_N_MS(500, state = (RMW_RET_OK == rmw_uros_ping_agent(500, 1)) ? AGENT_AVAILABLE : WAITING_AGENT;);
-            break;
-        case AGENT_AVAILABLE:
-            state = (true == create_entities()) ? AGENT_CONNECTED : WAITING_AGENT;
-            if (state == WAITING_AGENT) {
+    // Use inifiite loop to keep the task running like the void loop() function in Arduino framework.
+    while (true) {
+        switch (state) {
+            case WAITING_AGENT:
+                EXECUTE_EVERY_N_MS(500, state = (RMW_RET_OK == rmw_uros_ping_agent(500, 1)) ? AGENT_AVAILABLE : WAITING_AGENT;);
+                break;
+            case AGENT_AVAILABLE:
+                state = (true == create_entities()) ? AGENT_CONNECTED : WAITING_AGENT;
+                if (state == WAITING_AGENT) {
+                    destroy_entities();
+                };
+                break;
+            case AGENT_CONNECTED:
+                EXECUTE_EVERY_N_MS(200, state = (RMW_RET_OK == rmw_uros_ping_agent(500, 1)) ? AGENT_CONNECTED : AGENT_DISCONNECTED;);
+                if (state == AGENT_CONNECTED) {
+                    rclc_executor_spin_some(&executor_sub, RCL_MS_TO_NS(100));
+                    rclc_executor_spin_some(&executor_pub, RCL_MS_TO_NS(100));
+                }
+                break;
+            case AGENT_DISCONNECTED:
                 destroy_entities();
-            };
-            break;
-        case AGENT_CONNECTED:
-            EXECUTE_EVERY_N_MS(200, state = (RMW_RET_OK == rmw_uros_ping_agent(500, 1)) ? AGENT_CONNECTED : AGENT_DISCONNECTED;);
-            if (state == AGENT_CONNECTED) {
-                rclc_executor_spin_some(&executor_sub, RCL_MS_TO_NS(100));
-                rclc_executor_spin_some(&executor_pub, RCL_MS_TO_NS(100));
-            }
-            break;
-        case AGENT_DISCONNECTED:
-            destroy_entities();
-            state = WAITING_AGENT;
-            break;
-        default:
-            break;
+                state = WAITING_AGENT;
+                break;
+            default:
+                break;
+        }
     }
 }
 
@@ -202,8 +206,17 @@ void setup() {
     delay(2000);
 
     state = WAITING_AGENT;
+
+    xTaskCreate(
+        rosSubscriptionTaskFunction,  // Task function
+        "Micro ROS Task",             // Task name
+        8192,                         // Stack size (in bytes)
+        NULL,                         // Task parameters
+        configMAX_PRIORITIES - 1,     // Task priority
+        NULL                          // Task handle
+    );
 }
 
 void loop() {
-    rosSubscriptionTaskFunction(NULL);
+    // We use xTaskCreate and thus we don't need to put anything here.
 }
