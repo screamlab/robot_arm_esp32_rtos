@@ -29,8 +29,8 @@ trajectory_msgs__msg__JointTrajectoryPoint msg_pub;
 rclc_executor_t executor_pub;
 rcl_timer_t timer;
 
+// Global variables shared between the microROS task and the arm control task
 double joint_positions[NUM_OF_SERVOS] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-ArmManager *armManager;
 
 #define RCCHECK(fn)                    \
     {                                  \
@@ -64,16 +64,14 @@ enum states {
     AGENT_DISCONNECTED
 } state;
 
-void subscription_callback(const void* msgin) {
-    const trajectory_msgs__msg__JointTrajectoryPoint* msg = (const trajectory_msgs__msg__JointTrajectoryPoint*)msgin;
-    for (size_t i = 0; i < msg->positions.size; i++) {
+void subscription_callback(const void *msgin) {
+    const trajectory_msgs__msg__JointTrajectoryPoint *msg = (const trajectory_msgs__msg__JointTrajectoryPoint *)msgin;
+    for (size_t i = 0; i < msg->positions.size; ++i) {
         joint_positions[i] = degrees(msg->positions.data[i]);
-        armManager->setServoTargetAngle(i, uint8_t(joint_positions[i]));
     }
-    armManager->moveArm();
 }
 
-void timer_callback(rcl_timer_t* timer, int64_t last_call_time) {
+void timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
     RCLC_UNUSED(last_call_time);
     if (timer != NULL) {
         RCSOFTCHECK(rcl_publish(&publisher, &msg_pub, NULL));
@@ -103,10 +101,10 @@ bool create_entities() {
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(trajectory_msgs, msg, JointTrajectoryPoint),
         "/right_arm"));
-    
+
     msg_sub.positions.capacity = NUM_OF_SERVOS;
     msg_sub.positions.size = NUM_OF_SERVOS;
-    msg_sub.positions.data = (double*)calloc(msg_sub.positions.capacity, sizeof(double));
+    msg_sub.positions.data = (double *)calloc(msg_sub.positions.capacity, sizeof(double));
 
     // create subscriber executor
     RCCHECK(rclc_executor_init(&executor_sub, &support.context, 1, &allocator));
@@ -117,7 +115,7 @@ bool create_entities() {
         &publisher,
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(trajectory_msgs, msg, JointTrajectoryPoint),
-        "/right_arm_2"));
+        "/right_arm_republish"));
 
     // create timer, this timer sets the period for publishing data.
     const unsigned int timer_timeout = 50;
@@ -126,23 +124,20 @@ bool create_entities() {
         &support,
         RCL_MS_TO_NS(timer_timeout),  // Timer period in nanoseconds
         timer_callback));
-    
+
     msg_pub.positions.capacity = NUM_OF_SERVOS;
     msg_pub.positions.size = NUM_OF_SERVOS;
-    msg_pub.positions.data = (double*)calloc(msg_pub.positions.capacity, sizeof(double));
+    msg_pub.positions.data = (double *)calloc(msg_pub.positions.capacity, sizeof(double));
 
     // create executor
     RCCHECK(rclc_executor_init(&executor_pub, &support.context, 1, &allocator));
     RCCHECK(rclc_executor_add_timer(&executor_pub, &timer));
 
-    // create arm manager
-    armManager = new ArmManager(uint8_t(NUM_OF_SERVOS), servoMinAngles, servoMaxAngles, servoInitAngles);
-
     return true;
 }
 
 void destroy_entities() {
-    rmw_context_t* rmw_context = rcl_context_get_rmw_context(&support.context);
+    rmw_context_t *rmw_context = rcl_context_get_rmw_context(&support.context);
     (void)rmw_uros_set_context_entity_destroy_session_timeout(rmw_context, 0);
 
     // subscriber
@@ -150,7 +145,7 @@ void destroy_entities() {
     RCSOFTCHECK(rclc_executor_fini(&executor_sub));
 
     free(msg_sub.positions.data);
-    msg_sub.positions.data = nullptr;
+    msg_sub.positions.data = NULL;
 
     // publisher
     RCSOFTCHECK(rcl_publisher_fini(&publisher, &node));
@@ -158,40 +153,54 @@ void destroy_entities() {
     RCSOFTCHECK(rclc_executor_fini(&executor_pub));
 
     free(msg_pub.positions.data);
-    msg_pub.positions.data = nullptr;
+    msg_pub.positions.data = NULL;
 
     // common
     RCSOFTCHECK(rcl_node_fini(&node));
     RCSOFTCHECK(rclc_support_fini(&support));
-
-    // destroy arm manager
-    delete armManager;
 }
 
-void rosSubscriptionTaskFunction(void* parameter) {
-    switch (state) {
-        case WAITING_AGENT:
-            EXECUTE_EVERY_N_MS(500, state = (RMW_RET_OK == rmw_uros_ping_agent(500, 1)) ? AGENT_AVAILABLE : WAITING_AGENT;);
-            break;
-        case AGENT_AVAILABLE:
-            state = (true == create_entities()) ? AGENT_CONNECTED : WAITING_AGENT;
-            if (state == WAITING_AGENT) {
+void microROSTaskFunction(void *parameter) {
+    // Use inifiite loop to keep the task running like the void loop() function in Arduino framework.
+    while (true) {
+        switch (state) {
+            case WAITING_AGENT:
+                EXECUTE_EVERY_N_MS(500, state = (RMW_RET_OK == rmw_uros_ping_agent(500, 1)) ? AGENT_AVAILABLE : WAITING_AGENT;);
+                break;
+            case AGENT_AVAILABLE:
+                state = (true == create_entities()) ? AGENT_CONNECTED : WAITING_AGENT;
+                if (state == WAITING_AGENT) {
+                    destroy_entities();
+                };
+                break;
+            case AGENT_CONNECTED:
+                EXECUTE_EVERY_N_MS(200, state = (RMW_RET_OK == rmw_uros_ping_agent(500, 1)) ? AGENT_CONNECTED : AGENT_DISCONNECTED;);
+                if (state == AGENT_CONNECTED) {
+                    rclc_executor_spin_some(&executor_sub, RCL_MS_TO_NS(100));
+                    rclc_executor_spin_some(&executor_pub, RCL_MS_TO_NS(100));
+                }
+                break;
+            case AGENT_DISCONNECTED:
                 destroy_entities();
-            };
-            break;
-        case AGENT_CONNECTED:
-            EXECUTE_EVERY_N_MS(200, state = (RMW_RET_OK == rmw_uros_ping_agent(500, 1)) ? AGENT_CONNECTED : AGENT_DISCONNECTED;);
-            if (state == AGENT_CONNECTED) {
-                rclc_executor_spin_some(&executor_sub, RCL_MS_TO_NS(100));
-                rclc_executor_spin_some(&executor_pub, RCL_MS_TO_NS(100));
-            }
-            break;
-        case AGENT_DISCONNECTED:
-            destroy_entities();
-            state = WAITING_AGENT;
-            break;
-        default:
-            break;
+                state = WAITING_AGENT;
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+void armControlTaskFunction(void *parameter) {
+    ArmManager armManager(uint8_t(NUM_OF_SERVOS), servoMinAngles, servoMaxAngles, servoInitAngles);
+
+    while (true) {
+        for (size_t i = 0; i < NUM_OF_SERVOS; ++i) {
+            armManager.setServoTargetAngle(i, uint8_t(joint_positions[i]));
+        }
+        armManager.moveArm();
+
+        // Wait for some time before the next iteration
+        vTaskDelay(UPDATE_ARM_DELAY / portTICK_PERIOD_MS);
     }
 }
 
@@ -202,8 +211,32 @@ void setup() {
     delay(2000);
 
     state = WAITING_AGENT;
+
+    // Initialize joint_positions with the initial angles
+    for (size_t i = 0; i < NUM_OF_SERVOS; ++i) {
+        joint_positions[i] = double(servoInitAngles[i]);
+    }
+
+    xTaskCreate(
+        microROSTaskFunction,      // Task function
+        "Micro ROS Task",          // Task name
+        8192,                      // Stack size (in bytes)
+        NULL,                      // Task parameters
+        configMAX_PRIORITIES - 1,  // Task priority
+        NULL                       // Task handle
+    );
+    delay(100);
+    xTaskCreate(
+        armControlTaskFunction,  // Task function
+        "Arm Control Task",      // Task name
+        4096,                    // Stack size (in bytes)
+        NULL,                    // Task parameters
+        1,                       // Task priority
+        NULL                     // Task handle
+    );
+    delay(100);
 }
 
 void loop() {
-    rosSubscriptionTaskFunction(NULL);
+    // We use xTaskCreate and thus we don't need to put anything here.
 }
