@@ -64,8 +64,8 @@ enum states {
     AGENT_DISCONNECTED
 } state;
 
-void subscription_callback(const void* msgin) {
-    const trajectory_msgs__msg__JointTrajectoryPoint* msg = (const trajectory_msgs__msg__JointTrajectoryPoint*)msgin;
+void subscription_callback(const void *msgin) {
+    const trajectory_msgs__msg__JointTrajectoryPoint *msg = (const trajectory_msgs__msg__JointTrajectoryPoint *)msgin;
     for (size_t i = 0; i < msg->positions.size; i++) {
         joint_positions[i] = degrees(msg->positions.data[i]);
         armManager->setServoTargetAngle(i, uint8_t(joint_positions[i]));
@@ -73,7 +73,7 @@ void subscription_callback(const void* msgin) {
     armManager->moveArm();
 }
 
-void timer_callback(rcl_timer_t* timer, int64_t last_call_time) {
+void timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
     RCLC_UNUSED(last_call_time);
     if (timer != NULL) {
         RCSOFTCHECK(rcl_publish(&publisher, &msg_pub, NULL));
@@ -103,10 +103,10 @@ bool create_entities() {
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(trajectory_msgs, msg, JointTrajectoryPoint),
         "/right_arm"));
-    
+
     msg_sub.positions.capacity = NUM_OF_SERVOS;
     msg_sub.positions.size = NUM_OF_SERVOS;
-    msg_sub.positions.data = (double*)calloc(msg_sub.positions.capacity, sizeof(double));
+    msg_sub.positions.data = (double *)calloc(msg_sub.positions.capacity, sizeof(double));
 
     // create subscriber executor
     RCCHECK(rclc_executor_init(&executor_sub, &support.context, 1, &allocator));
@@ -126,10 +126,10 @@ bool create_entities() {
         &support,
         RCL_MS_TO_NS(timer_timeout),  // Timer period in nanoseconds
         timer_callback));
-    
+
     msg_pub.positions.capacity = NUM_OF_SERVOS;
     msg_pub.positions.size = NUM_OF_SERVOS;
-    msg_pub.positions.data = (double*)calloc(msg_pub.positions.capacity, sizeof(double));
+    msg_pub.positions.data = (double *)calloc(msg_pub.positions.capacity, sizeof(double));
 
     // create executor
     RCCHECK(rclc_executor_init(&executor_pub, &support.context, 1, &allocator));
@@ -142,7 +142,7 @@ bool create_entities() {
 }
 
 void destroy_entities() {
-    rmw_context_t* rmw_context = rcl_context_get_rmw_context(&support.context);
+    rmw_context_t *rmw_context = rcl_context_get_rmw_context(&support.context);
     (void)rmw_uros_set_context_entity_destroy_session_timeout(rmw_context, 0);
 
     // subscriber
@@ -168,7 +168,7 @@ void destroy_entities() {
     delete armManager;
 }
 
-void rosSubscriptionTaskFunction(void* parameter) {
+void rosSubscriptionTaskFunction(void *parameter) {
     switch (state) {
         case WAITING_AGENT:
             EXECUTE_EVERY_N_MS(500, state = (RMW_RET_OK == rmw_uros_ping_agent(500, 1)) ? AGENT_AVAILABLE : WAITING_AGENT;);
