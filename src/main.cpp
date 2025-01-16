@@ -208,7 +208,7 @@ void setup() {
     // Configure serial transport
     Serial.begin(115200);
     set_microros_serial_transports(Serial);
-    delay(2000);
+    delay(100);
 
     state = WAITING_AGENT;
 
