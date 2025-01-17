@@ -8,6 +8,7 @@
 #include <trajectory_msgs/msg/joint_trajectory_point.h>
 
 #include <armDriver.hpp>
+#include <esp32_led.hpp>
 #include <params.hpp>
 
 #if !defined(MICRO_ROS_TRANSPORT_ARDUINO_SERIAL)
@@ -57,12 +58,7 @@ double joint_positions[NUM_OF_SERVOS] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
         }                                  \
     } while (0)
 
-enum states {
-    WAITING_AGENT,
-    AGENT_AVAILABLE,
-    AGENT_CONNECTED,
-    AGENT_DISCONNECTED
-} state;
+states state;
 
 void subscription_callback(const void *msgin) {
     const trajectory_msgs__msg__JointTrajectoryPoint *msg = (const trajectory_msgs__msg__JointTrajectoryPoint *)msgin;
@@ -231,8 +227,17 @@ void setup() {
         "Arm Control Task",      // Task name
         4096,                    // Stack size (in bytes)
         NULL,                    // Task parameters
-        1,                       // Task priority
+        2,                       // Task priority
         NULL                     // Task handle
+    );
+    delay(100);
+    xTaskCreate(
+        led_task,    // Task function
+        "LED Task",  // Task name
+        1024,        // Stack size (in bytes)
+        &state,      // Task parameters
+        0,           // Task priority
+        NULL         // Task handle
     );
     delay(100);
 }

@@ -7,7 +7,7 @@ We need the following items.
 
 
 
-# Environment Settings
+## Environment Settings
 
 ### Windows Driver for ESP32
 
@@ -16,9 +16,19 @@ We need the following items.
 3. Right-click the `silabser.inf` and select "install".
 
 
-# Note
 
-## Subscribe and then Publish
+## On-Board LED State for ESP32 Dev. Board
+
+- Waiting to connect to the Micro ROS agent: The LED flashes.
+
+- Successfully connected to the Micro ROS agent: The LED remains steady.
+
+
+
+
+## Note
+
+### Subscribe and then Publish
 
 https://github.com/botamochi6277/micro_ros_arduino_pub_sub_example/blob/main/src/main.cpp
 
