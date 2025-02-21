@@ -12,10 +12,19 @@
 #define ESP32_LED 2
 #define UPDATE_ARM_DELAY 1.0
 const float ARM_MOVEMENT_STEP = 1.0;
-const size_t NUM_OF_SERVOS = 6;
-const uint8_t servoMinAngles[] = {0, 80, 0, 0, 0, 0};
-const uint8_t servoMaxAngles[] = {180, 180, 180, 120, 180, 90};
-const uint8_t servoInitAngles[] = {10, 170, 80, 10, 80, 10};
+const size_t NUM_ALL_SERVOS = 11;
+const uint8_t servoMinAngles[] = {0, 80, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+const uint8_t servoMaxAngles[] = {180, 180, 180, 120, 180, 90, 180, 180, 180, 180, 180};
+const uint8_t servoInitAngles[] = {10, 170, 80, 10, 80, 10, 180, 180, 180, 180, 180};
+const size_t NUM_ARM_SERVOS = 6;
+const size_t NUM_HAND_SERVOS = 5;
+const size_t ARM_OFFSET = 0;
+const size_t HAND_OFFSET = NUM_ARM_SERVOS;
+
+static_assert(sizeof(servoMinAngles) == NUM_ALL_SERVOS * sizeof(uint8_t));
+static_assert(sizeof(servoMaxAngles) == NUM_ALL_SERVOS * sizeof(uint8_t));
+static_assert(sizeof(servoInitAngles) == NUM_ALL_SERVOS * sizeof(uint8_t));
+static_assert(NUM_ARM_SERVOS + NUM_HAND_SERVOS == NUM_ALL_SERVOS);
 
 enum states {
     WAITING_AGENT,
