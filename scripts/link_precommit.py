@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 from SCons.Script import DefaultEnvironment
 
@@ -18,7 +19,9 @@ if os.path.lexists(dest_hook):
     os.remove(dest_hook)
 
 try:
-    os.symlink(src_hook, dest_hook)
+    # os.symlink(src_hook, dest_hook)
+    # Copy the hook file to the destination
+    shutil.copy(src_hook, dest_hook)
     print("Created symlink: {} -> {}".format(dest_hook, src_hook))
 except Exception as e:
     print("Error creating symlink:", e)
