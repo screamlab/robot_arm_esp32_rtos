@@ -231,6 +231,7 @@ void destroy_entities() {
     // common
     RCSOFTCHECK(rcl_node_fini(&node));
     RCSOFTCHECK(rclc_support_fini(&support));
+    RCSOFTCHECK(rcl_init_options_fini(&init_options));
 }
 
 void microROSTaskFunction(void *parameter) {
