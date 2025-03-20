@@ -16,6 +16,7 @@
 #endif
 
 rcl_allocator_t allocator;
+rcl_init_options_t init_options;
 rclc_support_t support;
 rcl_node_t node;
 
@@ -101,20 +102,26 @@ void hand_timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
  * - UCLIENT_MAX_SESSION_CONNECTION_ATTEMPTS=3
  */
 bool create_entities() {
+    // Initialize micro-ROS allocator
     allocator = rcl_get_default_allocator();
 
+    // Initialize and modify options (Set DOMAIN ID)
+    init_options = rcl_get_zero_initialized_init_options();
+    RCCHECK(rcl_init_options_init(&init_options, allocator));
+    RCCHECK(rcl_init_options_set_domain_id(&init_options, ROS_DOMAIN_ID));
+
     // create init_options
-    RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
+    RCCHECK(rclc_support_init_with_options(&support, 0, NULL, &init_options, &allocator));
 
     // create node
-    RCCHECK(rclc_node_init_default(&node, "micro_ros_platformio_node", "", &support));
+    RCCHECK(rclc_node_init_default(&node, NODE_NAME, NAMESPACE, &support));
 
     // create arm subscriber
     RCCHECK(rclc_subscription_init_default(
         &arm_sub,
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(trajectory_msgs, msg, JointTrajectoryPoint),
-        "/right_arm"));
+        ARM_TOPIC_NAME));
 
     arm_msg_sub.positions.capacity = NUM_ARM_SERVOS;
     arm_msg_sub.positions.size = NUM_ARM_SERVOS;
@@ -129,7 +136,7 @@ bool create_entities() {
         &hand_sub,
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(trajectory_msgs, msg, JointTrajectoryPoint),
-        "/right_hand"));
+        HAND_TOPIC_NAME));
 
     hand_msg_sub.positions.capacity = NUM_HAND_SERVOS;
     hand_msg_sub.positions.size = NUM_HAND_SERVOS;
@@ -144,7 +151,7 @@ bool create_entities() {
         &arm_pub,
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(trajectory_msgs, msg, JointTrajectoryPoint),
-        "/right_arm_republish"));
+        ARM_REPUBLISH_TOPIC_NAME));
 
     // create arm timer, this timer sets the period for publishing data.
     const unsigned int timer_timeout = 50;
@@ -167,7 +174,7 @@ bool create_entities() {
         &hand_pub,
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(trajectory_msgs, msg, JointTrajectoryPoint),
-        "/right_hand_republish"));
+        HAND_REPUBLISH_TOPIC_NAME));
 
     // create hand timer, this timer sets the period for publishing data.
     RCCHECK(rclc_timer_init_default(
