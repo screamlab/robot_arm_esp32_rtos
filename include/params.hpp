@@ -9,21 +9,39 @@
  * ON Board LED GPIO 2
  * Ref: https://circuits4you.com/2018/02/02/esp32-led-blink-example/
  */
+
+///< Define the left or right arm
+#define IS_RIGHT  // Comment this line to use left hand
+///< End define
+
+#ifndef IS_RIGHT
 #define ROS_DOMAIN_ID 0
-#define NODE_NAME "micro_ros_platformio_node"
+#define NODE_NAME "micro_ros_platformio_left_node"
+#define NAMESPACE ""
+#define ARM_TOPIC_NAME "/left_arm"
+#define HAND_TOPIC_NAME "/left_hand"
+#define ARM_REPUBLISH_TOPIC_NAME "/left_arm_republish"
+#define HAND_REPUBLISH_TOPIC_NAME "/left_hand_republish"
+const uint8_t servoMinAngles[] = {0, 0, 0, 0, 0, 90, 0, 0, 0, 0, 0};
+const uint8_t servoMaxAngles[] = {180, 90, 180, 120, 180, 180, 180, 180, 180, 180, 180};
+const uint8_t servoInitAngles[] = {10, 10, 100, 10, 100, 170, 180, 0, 0, 0, 0};
+#else
+#define ROS_DOMAIN_ID 0
+#define NODE_NAME "micro_ros_platformio_right_node"
 #define NAMESPACE ""
 #define ARM_TOPIC_NAME "/right_arm"
 #define HAND_TOPIC_NAME "/right_hand"
 #define ARM_REPUBLISH_TOPIC_NAME "/right_arm_republish"
 #define HAND_REPUBLISH_TOPIC_NAME "/right_hand_republish"
+const uint8_t servoMinAngles[] = {0, 80, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+const uint8_t servoMaxAngles[] = {180, 180, 180, 120, 180, 90, 180, 180, 180, 180, 180};
+const uint8_t servoInitAngles[] = {10, 170, 80, 10, 80, 10, 180, 180, 180, 180, 180};
+#endif
 
 #define ESP32_LED 2
 #define UPDATE_ARM_DELAY 1.0
 const float ARM_MOVEMENT_STEP = 1.0;
 const size_t NUM_ALL_SERVOS = 11;
-const uint8_t servoMinAngles[] = {0, 80, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-const uint8_t servoMaxAngles[] = {180, 180, 180, 120, 180, 90, 180, 180, 180, 180, 180};
-const uint8_t servoInitAngles[] = {10, 170, 80, 10, 80, 10, 180, 180, 180, 180, 180};
 const size_t NUM_ARM_SERVOS = 6;
 const size_t NUM_HAND_SERVOS = 5;
 const size_t ARM_OFFSET = 0;
