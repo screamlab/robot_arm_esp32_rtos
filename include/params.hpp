@@ -24,7 +24,7 @@
 #define HAND_REPUBLISH_TOPIC_NAME "/left_hand_republish"
 const uint8_t servoMinAngles[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 const uint8_t servoMaxAngles[] = {180, 90, 180, 120, 180, 180, 180, 180, 180, 180, 180};
-const uint8_t servoInitAngles[] = {170, 10, 100, 10, 100, 170, 180, 0, 0, 0, 0};
+const uint8_t servoInitAngles[] = {170, 10, 100, 10, 100, 100, 180, 0, 0, 0, 0};
 #else
 #define ROS_DOMAIN_ID 0
 #define NODE_NAME "micro_ros_platformio_right_node"
@@ -35,7 +35,7 @@ const uint8_t servoInitAngles[] = {170, 10, 100, 10, 100, 170, 180, 0, 0, 0, 0};
 #define HAND_REPUBLISH_TOPIC_NAME "/right_hand_republish"
 const uint8_t servoMinAngles[] = {0, 80, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 const uint8_t servoMaxAngles[] = {180, 180, 180, 120, 180, 180, 180, 180, 180, 180, 180};
-const uint8_t servoInitAngles[] = {10, 170, 80, 10, 80, 10, 180, 180, 180, 180, 180};
+const uint8_t servoInitAngles[] = {10, 170, 80, 10, 80, 80, 0, 180, 180, 180, 180};
 #endif
 
 #define ESP32_LED 2
