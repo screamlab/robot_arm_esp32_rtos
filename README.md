@@ -51,3 +51,9 @@ We subscribe the joint angles from `/NAMESPACE/ARM_TOPIC_NAME`, convert the radi
 
 
 
+## Testing
+
+We provide several simple scripts to publish joint angles to `ARM_TOPIC_NAME` and `HAND_TOPIC_NAME` to test your robot arm.
+
+
+
