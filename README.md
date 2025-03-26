@@ -25,10 +25,35 @@ We need the following items.
 
 
 
+## Parameters
 
-## Note
+### Left Arm or Right Arm
 
-### Subscribe and then Publish
+The `#define IS_RIGHT` directive in `include/params.hpp` controls the parameter setting to right arm.
 
-https://github.com/botamochi6277/micro_ros_arduino_pub_sub_example/blob/main/src/main.cpp
+To use the left arm, please comment out this line.
+
+
+
+### Shared Memory
+
+The `double joint_positions[NUM_ALL_SERVOS]` array, defined in `src/main.cpp`, serves as shared memory. Micro ROS writes into the shared memory based on subscribed data, while the arm controller reads from it to execute movements of the robot arm.
+
+
+
+## Debugging
+
+We subscribe the joint angles from `/NAMESPACE/ARM_TOPIC_NAME`, convert the radian values to degrees, and then publish them to `/NAMESPACE/ARM_REPUBLISH_TOPIC_NAME`. Similarly, we subscribe to `/NAMESPACE/HAND_TOPIC_NAME` and publish to `/NAMESPACE/HAND_REPUBLISH_TOPIC_NAME`.
+
+
+
+[Example](https://github.com/botamochi6277/micro_ros_arduino_pub_sub_example/blob/main/src/main.cpp) for publishing and subscribing data.
+
+
+
+## Testing
+
+We provide several simple scripts to publish joint angles to `ARM_TOPIC_NAME` and `HAND_TOPIC_NAME` to test your robot arm.
+
+
 
