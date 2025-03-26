@@ -22,7 +22,7 @@
 #define HAND_TOPIC_NAME "/left_hand"
 #define ARM_REPUBLISH_TOPIC_NAME "/left_arm_republish"
 #define HAND_REPUBLISH_TOPIC_NAME "/left_hand_republish"
-const uint8_t servoMinAngles[] = {0, 0, 0, 0, 0, 90, 0, 0, 0, 0, 0};
+const uint8_t servoMinAngles[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 const uint8_t servoMaxAngles[] = {180, 90, 180, 120, 180, 180, 180, 180, 180, 180, 180};
 const uint8_t servoInitAngles[] = {170, 10, 100, 10, 100, 170, 180, 0, 0, 0, 0};
 #else
@@ -34,7 +34,7 @@ const uint8_t servoInitAngles[] = {170, 10, 100, 10, 100, 170, 180, 0, 0, 0, 0};
 #define ARM_REPUBLISH_TOPIC_NAME "/right_arm_republish"
 #define HAND_REPUBLISH_TOPIC_NAME "/right_hand_republish"
 const uint8_t servoMinAngles[] = {0, 80, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-const uint8_t servoMaxAngles[] = {180, 180, 180, 120, 180, 90, 180, 180, 180, 180, 180};
+const uint8_t servoMaxAngles[] = {180, 180, 180, 120, 180, 180, 180, 180, 180, 180, 180};
 const uint8_t servoInitAngles[] = {10, 170, 80, 10, 80, 10, 180, 180, 180, 180, 180};
 #endif
 
