@@ -116,6 +116,7 @@ void microROSTaskFunction(void *parameter) {
         switch (state) {
             case WAITING_AGENT:
                 EXECUTE_EVERY_N_MS(500, state = (RMW_RET_OK == rmw_uros_ping_agent(500, 1)) ? AGENT_AVAILABLE : WAITING_AGENT;);
+                vTaskDelay(100 / portTICK_PERIOD_MS);
                 break;
             case AGENT_AVAILABLE:
                 state = (true == create_entities()) ? AGENT_CONNECTED : WAITING_AGENT;
