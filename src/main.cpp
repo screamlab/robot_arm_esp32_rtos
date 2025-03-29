@@ -115,7 +115,7 @@ void microROSTaskFunction(void *parameter) {
     while (true) {
         switch (state) {
             case WAITING_AGENT:
-                EXECUTE_EVERY_N_MS(500, state = (RMW_RET_OK == rmw_uros_ping_agent(500, 1)) ? AGENT_AVAILABLE : WAITING_AGENT;);
+                EXECUTE_EVERY_N_MS(500, state = (RMW_RET_OK == rmw_uros_ping_agent(20, 1)) ? AGENT_AVAILABLE : WAITING_AGENT;);
                 vTaskDelay(100 / portTICK_PERIOD_MS);
                 break;
             case AGENT_AVAILABLE:
@@ -125,7 +125,7 @@ void microROSTaskFunction(void *parameter) {
                 };
                 break;
             case AGENT_CONNECTED:
-                EXECUTE_EVERY_N_MS(200, state = (RMW_RET_OK == rmw_uros_ping_agent(500, 1)) ? AGENT_CONNECTED : AGENT_DISCONNECTED;);
+                EXECUTE_EVERY_N_MS(2000, state = (RMW_RET_OK == rmw_uros_ping_agent(20, 1)) ? AGENT_CONNECTED : AGENT_DISCONNECTED;);
                 if (state == AGENT_CONNECTED) {
                     rclc_executor_spin_some(&arm_executor_sub, RCL_MS_TO_NS(100));
                     rclc_executor_spin_some(&hand_executor_sub, RCL_MS_TO_NS(100));
