@@ -159,7 +159,7 @@ void armControlTaskFunction(void *parameter) {
 
 void setup() {
     // Configure serial transport
-    Serial.begin(115200);
+    Serial.begin(921600);
     set_microros_serial_transports(Serial);
     delay(100);
 
