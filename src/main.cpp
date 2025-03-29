@@ -1,14 +1,8 @@
 #include <Arduino.h>
-#include <micro_ros_platformio.h>
-#include <rcl/rcl.h>
-#include <rclc/executor.h>
-#include <rclc/rclc.h>
-#include <rmw_microros/rmw_microros.h>
-#include <std_msgs/msg/int32.h>
-#include <trajectory_msgs/msg/joint_trajectory_point.h>
 
 #include <armDriver.hpp>
 #include <esp32_led.hpp>
+#include <micro_ros_utils.hpp>
 #include <params.hpp>
 
 #if !defined(MICRO_ROS_TRANSPORT_ARDUINO_SERIAL)
@@ -33,39 +27,6 @@ rcl_timer_t arm_timer, hand_timer;
 
 // Global variables shared between the microROS task and the arm control task
 double joint_positions[NUM_ALL_SERVOS] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-
-#define RCCHECK(fn)                    \
-    {                                  \
-        rcl_ret_t temp_rc = fn;        \
-        if ((temp_rc != RCL_RET_OK)) { \
-            return false;              \
-        }                              \
-    }
-#define RCSOFTCHECK(fn)                \
-    {                                  \
-        rcl_ret_t temp_rc = fn;        \
-        if ((temp_rc != RCL_RET_OK)) { \
-        }                              \
-    }
-#define FNCHECK(fn, type_) \
-    {                      \
-        type_ ret = fn;    \
-        if (!ret) {        \
-            return false;  \
-        }                  \
-    }
-
-#define EXECUTE_EVERY_N_MS(MS, X)          \
-    do {                                   \
-        static volatile int64_t init = -1; \
-        if (init == -1) {                  \
-            init = uxr_millis();           \
-        }                                  \
-        if (uxr_millis() - init > MS) {    \
-            X;                             \
-            init = uxr_millis();           \
-        }                                  \
-    } while (0)
 
 states state;
 
@@ -109,126 +70,6 @@ void hand_timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
  * - RMW_UXRCE_ENTITY_CREATION_DESTROY_TIMEOUT=0
  * - UCLIENT_MAX_SESSION_CONNECTION_ATTEMPTS=3
  */
-bool create_node(rcl_allocator_t *allocator,
-                 rcl_init_options_t *init_options,
-                 rclc_support_t *support,
-                 rcl_node_t *node,
-                 size_t domain_id = ROS_DOMAIN_ID,
-                 const char *node_name = NODE_NAME,
-                 const char *namespace_ = NAMESPACE) {
-    // Initialize micro-ROS allocator
-    *allocator = rcl_get_default_allocator();
-
-    // Initialize and modify options (Set DOMAIN ID)
-    *init_options = rcl_get_zero_initialized_init_options();
-    RCCHECK(rcl_init_options_init(init_options, *allocator));
-    RCCHECK(rcl_init_options_set_domain_id(init_options, domain_id));
-
-    // create init_options
-    RCCHECK(rclc_support_init_with_options(support, 0, NULL, init_options, allocator));
-
-    // create node
-    RCCHECK(rclc_node_init_default(node, node_name, namespace_, support));
-
-    return true;
-}
-
-bool create_subscriber(rcl_allocator_t *allocator,
-                       rclc_support_t *support,
-                       rcl_node_t *node,
-                       const char *topic_name,
-                       rcl_subscription_t *subscription,
-                       rclc_subscription_callback_t callback,
-                       trajectory_msgs__msg__JointTrajectoryPoint *data,
-                       const size_t data_size,
-                       rclc_executor_t *executor,
-                       const rclc_executor_handle_invocation_t invocation = ON_NEW_DATA) {
-    // create subscriber
-    RCCHECK(rclc_subscription_init_default(
-        subscription,
-        node,
-        ROSIDL_GET_MSG_TYPE_SUPPORT(trajectory_msgs, msg, JointTrajectoryPoint),
-        topic_name));
-
-    data->positions.capacity = data_size;
-    data->positions.size = data_size;
-    FNCHECK(data->positions.data = (double *)calloc(data->positions.capacity, sizeof(double)), double *);
-
-    // create subscriber executor
-    RCCHECK(rclc_executor_init(executor, &support->context, 1, allocator));
-    RCCHECK(rclc_executor_add_subscription(executor, subscription, data, callback, invocation));
-
-    return true;
-}
-
-bool create_publisher(rcl_allocator_t *allocator,
-                      rclc_support_t *support,
-                      rcl_node_t *node,
-                      const char *topic_name,
-                      rcl_publisher_t *publisher,
-                      rcl_timer_t *timer,
-                      rcl_timer_callback_t callback,
-                      trajectory_msgs__msg__JointTrajectoryPoint *data,
-                      const size_t data_size,
-                      rclc_executor_t *executor,
-                      const unsigned int timer_timeout = 50) {
-    // Create publisher
-    RCCHECK(rclc_publisher_init_default(
-        publisher,
-        node,
-        ROSIDL_GET_MSG_TYPE_SUPPORT(trajectory_msgs, msg, JointTrajectoryPoint),
-        topic_name));
-
-    // Create timer
-    RCCHECK(rclc_timer_init_default(
-        timer,
-        support,
-        RCL_MS_TO_NS(timer_timeout),  // Timer period in nanoseconds
-        callback));
-
-    data->positions.capacity = data_size;
-    data->positions.size = data_size;
-    FNCHECK(data->positions.data = (double *)calloc(data->positions.capacity, sizeof(double)), double *);
-
-    // Create publisher executor
-    RCCHECK(rclc_executor_init(executor, &support->context, 1, allocator));
-    RCCHECK(rclc_executor_add_timer(executor, timer));
-
-    return true;
-}
-
-void delete_node(rcl_init_options_t *init_options,
-                 rclc_support_t *support,
-                 rcl_node_t *node) {
-    // Free resources
-    RCSOFTCHECK(rcl_node_fini(node));
-    RCSOFTCHECK(rclc_support_fini(support));
-    RCSOFTCHECK(rcl_init_options_fini(init_options));
-}
-
-void delete_subscriber(rcl_node_t *node,
-                       rcl_subscription_t *subscription,
-                       trajectory_msgs__msg__JointTrajectoryPoint *data,
-                       rclc_executor_t *executor) {
-    // Free resources
-    RCSOFTCHECK(rcl_subscription_fini(subscription, node));
-    RCSOFTCHECK(rclc_executor_fini(executor));
-    free(data->positions.data);
-    data->positions.data = NULL;
-}
-
-void delete_publisher(rcl_node_t *node,
-                      rcl_publisher_t *publisher,
-                      rcl_timer_t *timer,
-                      trajectory_msgs__msg__JointTrajectoryPoint *data,
-                      rclc_executor_t *executor) {
-    // Free resources
-    RCSOFTCHECK(rcl_publisher_fini(publisher, node));
-    RCSOFTCHECK(rcl_timer_fini(timer));
-    RCSOFTCHECK(rclc_executor_fini(executor));
-    free(data->positions.data);
-    data->positions.data = NULL;
-}
 
 bool create_entities() {
     // create node
