@@ -43,7 +43,7 @@ The `double joint_positions[NUM_ALL_SERVOS]` array, defined in `src/main.cpp`, s
 
 ## Debugging
 
-We subscribe the joint angles from `/NAMESPACE/ARM_TOPIC_NAME`, convert the radian values to degrees, and then publish them to `/NAMESPACE/ARM_REPUBLISH_TOPIC_NAME`. Similarly, we subscribe to `/NAMESPACE/HAND_TOPIC_NAME` and publish to `/NAMESPACE/HAND_REPUBLISH_TOPIC_NAME`.
+We subscribe the joint angles from `/NAMESPACE/TOPIC_NAME`, convert the radian values to degrees, and then publish them to `/NAMESPACE/REPUBLISH_TOPIC_NAME`.
 
 
 
@@ -54,6 +54,5 @@ We subscribe the joint angles from `/NAMESPACE/ARM_TOPIC_NAME`, convert the radi
 ## Testing
 
 We provide several simple scripts to publish joint angles to `ARM_TOPIC_NAME` and `HAND_TOPIC_NAME` to test your robot arm.
-
 
 
