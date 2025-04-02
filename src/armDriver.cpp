@@ -62,13 +62,27 @@ void ArmManager::getCurrentAngles(float currentAngles[]) {
 }
 
 void ArmManager::moveArm() {
-    for (uint8_t i = 0; i < this->numServos; ++i) {
+    uint8_t i = 0;
+    for (; i < HAND_BIAS; ++i) {
         if (abs(this->servoCurrentAngles[i] - this->servoTargetAngles[i]) >= ARM_MOVEMENT_STEP) {
             float step = (this->servoTargetAngles[i] > this->servoCurrentAngles[i]) ? ARM_MOVEMENT_STEP : -ARM_MOVEMENT_STEP;
             this->servoCurrentAngles[i] += step;
-            // this line will occur some delay to let device work not properly
-            // please make sure you had connect to PCA9685 pwm driver.
-            setServoAngle(i, this->servoCurrentAngles[i]);
+        } else {
+            this->servoCurrentAngles[i] = this->servoTargetAngles[i];
         }
+        // this line will occur some delay to let device work not properly
+        // please make sure you had connect to PCA9685 pwm driver.
+        setServoAngle(i, this->servoCurrentAngles[i]);
+    }
+    for (; i < this->numServos; ++i) {
+        if (abs(this->servoCurrentAngles[i] - this->servoTargetAngles[i]) >= HAND_MOVEMENT_STEP) {
+            float step = (this->servoTargetAngles[i] > this->servoCurrentAngles[i]) ? HAND_MOVEMENT_STEP : -HAND_MOVEMENT_STEP;
+            this->servoCurrentAngles[i] += step;
+        } else {
+            this->servoCurrentAngles[i] = this->servoTargetAngles[i];
+        }
+        // this line will occur some delay to let device work not properly
+        // please make sure you had connect to PCA9685 pwm driver.
+        setServoAngle(i, this->servoCurrentAngles[i]);
     }
 }

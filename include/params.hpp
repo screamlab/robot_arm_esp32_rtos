@@ -36,7 +36,9 @@ const uint8_t servoInitAngles[] = {10, 170, 80, 10, 80, 80, 0, 180, 180, 180, 18
 
 #define ESP32_LED 2
 #define UPDATE_ARM_DELAY 1.0
-const float ARM_MOVEMENT_STEP = 1.0;
+#define HAND_BIAS 6
+const float ARM_MOVEMENT_STEP = 10.0;
+const float HAND_MOVEMENT_STEP = 180.0;
 const size_t NUM_SERVOS = 11;
 
 static_assert(sizeof(servoMinAngles) == NUM_SERVOS * sizeof(uint8_t));
