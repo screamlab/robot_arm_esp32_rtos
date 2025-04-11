@@ -41,6 +41,14 @@ The `double joint_positions[NUM_ALL_SERVOS]` array, defined in `src/main.cpp`, s
 
 
 
+### Mutex Lock
+
+The `#define USE_MUTEX_LOCK` directive in `include/params.hpp` controls the code to use the mutex lock.
+
+To disable the mutex lock, please comment out this line.
+
+
+
 ## Debugging
 
 We subscribe the joint angles from `/NAMESPACE/TOPIC_NAME`, convert the radian values to degrees, and then publish them to `/NAMESPACE/REPUBLISH_TOPIC_NAME`.

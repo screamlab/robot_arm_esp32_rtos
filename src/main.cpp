@@ -25,6 +25,11 @@ trajectory_msgs__msg__JointTrajectoryPoint msg_pub;
 rclc_executor_t executor_pub;
 rcl_timer_t timer;
 
+// Global mutex declaration
+#ifdef USE_MUTEX_LOCK
+SemaphoreHandle_t xJointPositionsMutex = NULL;
+#endif
+
 // Global variables shared between the microROS task and the arm control task
 double joint_positions[NUM_SERVOS] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 
@@ -32,18 +37,37 @@ states state;
 
 void subscription_callback(const void *msgin) {
     const trajectory_msgs__msg__JointTrajectoryPoint *msg = (const trajectory_msgs__msg__JointTrajectoryPoint *)msgin;
-    for (size_t i = 0; i < msg->positions.size; ++i) {
-        joint_positions[i] = degrees(msg->positions.data[i]);
+
+#ifdef USE_MUTEX_LOCK
+    // Attempt to lock the mutex
+    if (xSemaphoreTake(xJointPositionsMutex, portMAX_DELAY) == pdTRUE) {
+#endif
+        for (size_t i = 0; i < msg->positions.size; ++i) {
+            joint_positions[i] = degrees(msg->positions.data[i]);
+        }
+#ifdef USE_MUTEX_LOCK
+        // Release the mutex after update
+        xSemaphoreGive(xJointPositionsMutex);
     }
+#endif
 }
 
 void timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
     RCLC_UNUSED(last_call_time);
     if (timer != NULL) {
-        RCSOFTCHECK(rcl_publish(&pub, &msg_pub, NULL));
-        for (size_t i = 0; i < msg_pub.positions.capacity; i++) {
-            msg_pub.positions.data[i] = joint_positions[i];
+#ifdef USE_MUTEX_LOCK
+        // Attempt to lock the mutex
+        if (xSemaphoreTake(xJointPositionsMutex, portMAX_DELAY) == pdTRUE) {
+#endif
+            for (size_t i = 0; i < msg_pub.positions.capacity; i++) {
+                msg_pub.positions.data[i] = joint_positions[i];
+            }
+#ifdef USE_MUTEX_LOCK
+            // Release the mutex after update
+            xSemaphoreGive(xJointPositionsMutex);
         }
+#endif
+        RCSOFTCHECK(rcl_publish(&pub, &msg_pub, NULL));
     }
 }
 
@@ -116,9 +140,18 @@ void armControlTaskFunction(void *parameter) {
     ArmManager armManager(uint8_t(NUM_SERVOS), servoMinAngles, servoMaxAngles, servoInitAngles);
 
     while (true) {
-        for (size_t i = 0; i < NUM_SERVOS; ++i) {
-            armManager.setServoTargetAngle(i, uint8_t(joint_positions[i]));
+#ifdef USE_MUTEX_LOCK
+        // Lock the mutex before reading shared data
+        if (xSemaphoreTake(xJointPositionsMutex, portMAX_DELAY) == pdTRUE) {
+#endif
+            for (size_t i = 0; i < NUM_SERVOS; ++i) {
+                armManager.setServoTargetAngle(i, uint8_t(joint_positions[i]));
+            }
+#ifdef USE_MUTEX_LOCK
+            // Once done, release the mutex
+            xSemaphoreGive(xJointPositionsMutex);
         }
+#endif
         armManager.moveArm();
 
         // Wait for some time before the next iteration
@@ -133,6 +166,13 @@ void setup() {
     delay(100);
 
     state = WAITING_AGENT;
+
+#ifdef USE_MUTEX_LOCK
+    // Create the mutex
+    do {
+        xJointPositionsMutex = xSemaphoreCreateMutex();
+    } while (xJointPositionsMutex == NULL);
+#endif
 
     // Initialize joint_positions with the initial angles
     for (size_t i = 0; i < NUM_SERVOS; ++i) {

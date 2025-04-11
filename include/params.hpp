@@ -14,6 +14,10 @@
 #define IS_RIGHT  // Comment this line to use left hand
 ///< End define
 
+///< Define whether to use mutex lock or not
+#define USE_MUTEX_LOCK  // Comment this line to disable mutex lock
+///< End define
+
 #ifndef IS_RIGHT
 #define ROS_DOMAIN_ID 0
 #define NODE_NAME "micro_ros_platformio_left_node"
