@@ -19,11 +19,13 @@ rcl_subscription_t sub;
 trajectory_msgs__msg__JointTrajectoryPoint msg_sub;
 rclc_executor_t executor_sub;
 
+#ifdef USE_REPUBLISH
 // publisher
 rcl_publisher_t pub;
 trajectory_msgs__msg__JointTrajectoryPoint msg_pub;
 rclc_executor_t executor_pub;
 rcl_timer_t timer;
+#endif
 
 // Global mutex declaration
 #ifdef USE_MUTEX_LOCK
@@ -32,6 +34,7 @@ SemaphoreHandle_t xJointPositionsMutex = NULL;
 
 // Global variables shared between the microROS task and the arm control task
 double joint_positions[NUM_SERVOS] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+uint64_t msg_cnt = 0;
 
 states state;
 
@@ -45,6 +48,14 @@ void subscription_callback(const void *msgin) {
         for (size_t i = 0; i < msg->positions.size; ++i) {
             joint_positions[i] = degrees(msg->positions.data[i]);
         }
+        ++msg_cnt;
+#ifdef USE_UART2
+        Serial2.printf("#%llu:\n", msg_cnt);
+        for (size_t i = 0; i < msg->positions.size; ++i) {
+            Serial2.printf("%.3lf%c", joint_positions[i], (i == msg->positions.size - 1 || i % 5 == 4) ? '\n' : ' ');
+        }
+        Serial2.println();
+#endif
 #ifdef USE_MUTEX_LOCK
         // Release the mutex after update
         xSemaphoreGive(xJointPositionsMutex);
@@ -52,6 +63,7 @@ void subscription_callback(const void *msgin) {
 #endif
 }
 
+#ifdef USE_REPUBLISH
 void timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
     RCLC_UNUSED(last_call_time);
     if (timer != NULL) {
@@ -70,6 +82,7 @@ void timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
         RCSOFTCHECK(rcl_publish(&pub, &msg_pub, NULL));
     }
 }
+#endif
 
 /**
  * Functions create_entities and destroy_entities can take several seconds.
@@ -85,8 +98,10 @@ bool create_entities() {
     // create subscriber
     FNCHECK(create_subscriber(&allocator, &support, &node, TOPIC_NAME, &sub, subscription_callback, &msg_sub, NUM_SERVOS, &executor_sub), bool);
 
+#ifdef USE_REPUBLISH
     // create publisher
     FNCHECK(create_publisher(&allocator, &support, &node, REPUBLISH_TOPIC_NAME, &pub, &timer, timer_callback, &msg_pub, NUM_SERVOS, &executor_pub), bool);
+#endif
 
     return true;
 }
@@ -98,8 +113,10 @@ void destroy_entities() {
     // subscriber
     delete_subscriber(&node, &sub, &msg_sub, &executor_sub);
 
+#ifdef USE_REPUBLISH
     // publisher
     delete_publisher(&node, &pub, &timer, &msg_pub, &executor_pub);
+#endif
 
     // common
     delete_node(&init_options, &support, &node);
@@ -110,7 +127,7 @@ void microROSTaskFunction(void *parameter) {
     while (true) {
         switch (state) {
             case WAITING_AGENT:
-                EXECUTE_EVERY_N_MS(500, state = (RMW_RET_OK == rmw_uros_ping_agent(20, 1)) ? AGENT_AVAILABLE : WAITING_AGENT;);
+                EXECUTE_EVERY_N_MS(500, state = (RMW_RET_OK == rmw_uros_ping_agent(100, 1)) ? AGENT_AVAILABLE : WAITING_AGENT;);
                 vTaskDelay(100 / portTICK_PERIOD_MS);
                 break;
             case AGENT_AVAILABLE:
@@ -120,10 +137,12 @@ void microROSTaskFunction(void *parameter) {
                 }
                 break;
             case AGENT_CONNECTED:
-                EXECUTE_EVERY_N_MS(2000, state = (RMW_RET_OK == rmw_uros_ping_agent(20, 1)) ? AGENT_CONNECTED : AGENT_DISCONNECTED;);
+                EXECUTE_EVERY_N_MS(2000, state = (RMW_RET_OK == rmw_uros_ping_agent(200, 2)) ? AGENT_CONNECTED : AGENT_DISCONNECTED;);
                 if (state == AGENT_CONNECTED) {
                     rclc_executor_spin_some(&executor_sub, RCL_MS_TO_NS(50));
+#ifdef USE_REPUBLISH
                     rclc_executor_spin_some(&executor_pub, RCL_MS_TO_NS(50));
+#endif
                 }
                 break;
             case AGENT_DISCONNECTED:
@@ -164,6 +183,11 @@ void setup() {
     Serial.begin(921600);
     set_microros_serial_transports(Serial);
     delay(100);
+
+#ifdef USE_UART2
+    // Configure UART2 serial transport for debugging
+    Serial2.begin(921600, SERIAL_8N1, RX2, TX2);
+#endif
 
     state = WAITING_AGENT;
 

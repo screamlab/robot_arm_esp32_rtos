@@ -10,12 +10,18 @@
  * Ref: https://circuits4you.com/2018/02/02/esp32-led-blink-example/
  */
 
-///< Define the left or right arm
+///< Begin define
+// Define the left or right arm
 #define IS_RIGHT  // Comment this line to use left hand
-///< End define
 
-///< Define whether to use mutex lock or not
+// Define whether to use mutex lock or not
 #define USE_MUTEX_LOCK  // Comment this line to disable mutex lock
+
+// Define whether to use republish or not
+// #define USE_REPUBLISH  // Comment this line to disable republish
+
+// Define whether to use UART2 for debugging or not
+#define USE_UART2  // Comment this line to disable UART2 for debugging
 ///< End define
 
 #ifndef IS_RIGHT
