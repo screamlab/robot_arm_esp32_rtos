@@ -27,6 +27,7 @@ rcl_timer_t arm_timer, hand_timer;
 
 // Global variables shared between the microROS task and the arm control task
 double joint_positions[NUM_ALL_SERVOS] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+uint64_t msg_cnt = 0;
 
 states state;
 
@@ -52,6 +53,11 @@ void hand_subscription_callback(const void *msgin) {
     for (size_t i = 0; i < msg->positions.size; ++i) {
         joint_positions[i + HAND_OFFSET] = degrees(msg->positions.data[i]);
     }
+    Serial2.printf("#%llu:\n", ++msg_cnt);
+    for (size_t i = 0; i < msg->positions.size; ++i) {
+        Serial2.printf("%.3lf%c", msg->positions.data[i], (i == msg->positions.size - 1 || i % 5 == 4) ? '\n' : ' ');
+    }
+    Serial2.println();
 }
 
 void hand_timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
@@ -162,6 +168,9 @@ void setup() {
     Serial.begin(921600);
     set_microros_serial_transports(Serial);
     delay(100);
+
+    // Configure UART2 serial transport for debugging
+    Serial2.begin(921600, SERIAL_8N1, RX2, TX2);
 
     state = WAITING_AGENT;
 
