@@ -44,13 +44,13 @@ rclc_support_t support;
 rcl_node_t node;
 
 // subscriber
-rcl_subscription_t arm_sub, hand_sub;
-trajectory_msgs__msg__JointTrajectoryPoint arm_msg_sub, hand_msg_sub;
+rcl_subscription_t sub;
+trajectory_msgs__msg__JointTrajectoryPoint msg_sub;
 
 #ifdef USE_PUBLISH
 // publisher
-rcl_publisher_t arm_pub, hand_pub;
-trajectory_msgs__msg__JointTrajectoryPoint arm_msg_pub, hand_msg_pub;
+rcl_publisher_t pub;
+trajectory_msgs__msg__JointTrajectoryPoint msg_pub;
 #endif
 
 // executor
@@ -67,37 +67,14 @@ uint64_t msg_cnt = 0;
 
 states state;
 
-void arm_subscription_callback(const void *msgin) {
+void subscription_callback(const void *msgin) {
     const trajectory_msgs__msg__JointTrajectoryPoint *msg = (const trajectory_msgs__msg__JointTrajectoryPoint *)msgin;
 #ifdef USE_MUTEX_LOCK
     // Attempt to lock the mutex
     if (xSemaphoreTake(xJointPositionsMutex, portMAX_DELAY) == pdTRUE) {
 #endif
         for (size_t i = 0; i < msg->positions.size; ++i) {
-            joint_positions[i + ARM_OFFSET] = degrees(msg->positions.data[i]);
-        }
-        ++msg_cnt;
-#ifdef USE_PUBLISH
-        for (size_t i = 0; i < msg->positions.size; ++i) {
-            arm_msg_pub.positions.data[i] = radians(joint_positions[i + ARM_OFFSET]);
-        }
-        rcl_publish(&arm_pub, &arm_msg_pub, NULL);
-#endif
-#ifdef USE_MUTEX_LOCK
-        // Release the mutex after update
-        xSemaphoreGive(xJointPositionsMutex);
-    }
-#endif
-}
-
-void hand_subscription_callback(const void *msgin) {
-    const trajectory_msgs__msg__JointTrajectoryPoint *msg = (const trajectory_msgs__msg__JointTrajectoryPoint *)msgin;
-#ifdef USE_MUTEX_LOCK
-    // Attempt to lock the mutex
-    if (xSemaphoreTake(xJointPositionsMutex, portMAX_DELAY) == pdTRUE) {
-#endif
-        for (size_t i = 0; i < msg->positions.size; ++i) {
-            joint_positions[i + HAND_OFFSET] = degrees(msg->positions.data[i]);
+            joint_positions[i] = degrees(msg->positions.data[i]);
         }
         Serial2.printf("#%llu: ", ++msg_cnt);
         for (size_t i = 0; i < msg->positions.size; ++i) {
@@ -105,9 +82,9 @@ void hand_subscription_callback(const void *msgin) {
         }
 #ifdef USE_PUBLISH
         for (size_t i = 0; i < msg->positions.size; ++i) {
-            hand_msg_pub.positions.data[i] = radians(joint_positions[i + HAND_OFFSET]);
+            msg_pub.positions.data[i] = radians(joint_positions[i]);
         }
-        rcl_publish(&hand_pub, &hand_msg_pub, NULL);
+        rcl_publish(&pub, &msg_pub, NULL);
 #endif
 #ifdef USE_MUTEX_LOCK
         // Release the mutex after update
@@ -140,56 +117,38 @@ bool create_entities() {
     RCCHECK(rclc_node_init_default(&node, NODE_NAME, NAMESPACE, &support));
 
     // Allocate the memory for the messages
-    arm_msg_sub.positions.capacity = NUM_ARM_SERVOS;
-    arm_msg_sub.positions.size = NUM_ARM_SERVOS;
-    arm_msg_sub.positions.data = (double *)calloc(arm_msg_sub.positions.capacity, sizeof(double));
+    msg_sub.positions.capacity = NUM_ALL_SERVOS;
+    msg_sub.positions.size = NUM_ALL_SERVOS;
+    msg_sub.positions.data = (double *)calloc(msg_sub.positions.capacity, sizeof(double));
 
-    hand_msg_sub.positions.capacity = NUM_HAND_SERVOS;
-    hand_msg_sub.positions.size = NUM_HAND_SERVOS;
-    hand_msg_sub.positions.data = (double *)calloc(hand_msg_sub.positions.capacity, sizeof(double));
 #ifdef USE_PUBLISH
-    arm_msg_pub.positions.capacity = NUM_ARM_SERVOS;
-    arm_msg_pub.positions.size = NUM_ARM_SERVOS;
-    arm_msg_pub.positions.data = (double *)calloc(arm_msg_pub.positions.capacity, sizeof(double));
-
-    hand_msg_pub.positions.capacity = NUM_HAND_SERVOS;
-    hand_msg_pub.positions.size = NUM_HAND_SERVOS;
-    hand_msg_pub.positions.data = (double *)calloc(hand_msg_pub.positions.capacity, sizeof(double));
+    msg_pub.positions.capacity = NUM_ALL_SERVOS;
+    msg_pub.positions.size = NUM_ALL_SERVOS;
+    msg_pub.positions.data = (double *)calloc(msg_pub.positions.capacity, sizeof(double));
 #endif
+
     // Init the subscriber on the best effort mode
     RCCHECK(rclc_subscription_init_default(
-        &arm_sub,
+        &sub,
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(trajectory_msgs, msg, JointTrajectoryPoint),
-        ARM_TOPIC_NAME));
-    RCCHECK(rclc_subscription_init_default(
-        &hand_sub,
-        &node,
-        ROSIDL_GET_MSG_TYPE_SUPPORT(trajectory_msgs, msg, JointTrajectoryPoint),
-        HAND_TOPIC_NAME));
+        TOPIC_NAME));
+
 #ifdef USE_PUBLISH
     // Init the publisher on the best effort mode
     RCCHECK(rclc_publisher_init_default(
-        &arm_pub,
+        &pub,
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(trajectory_msgs, msg, JointTrajectoryPoint),
-        ARM_REPUBLISH_TOPIC_NAME));
-    RCCHECK(rclc_publisher_init_default(
-        &hand_pub,
-        &node,
-        ROSIDL_GET_MSG_TYPE_SUPPORT(trajectory_msgs, msg, JointTrajectoryPoint),
-        HAND_REPUBLISH_TOPIC_NAME));
+        REPUBLISH_TOPIC_NAME));
 #endif
     // Init the executor with the node support
     executor = rclc_executor_get_zero_initialized_executor();
-    RCCHECK(rclc_executor_init(&executor, &support.context, 2, &allocator));
+    RCCHECK(rclc_executor_init(&executor, &support.context, 1, &allocator));
 
     // Add the subscription to the executor
-    RCCHECK(rclc_executor_add_subscription(&executor, &arm_sub, &arm_msg_sub,
-                                           arm_subscription_callback, ON_NEW_DATA));
-
-    RCCHECK(rclc_executor_add_subscription(&executor, &hand_sub, &hand_msg_sub,
-                                           hand_subscription_callback, ON_NEW_DATA));
+    RCCHECK(rclc_executor_add_subscription(&executor, &sub, &msg_sub,
+                                           subscription_callback, ON_NEW_DATA));
     return true;
 }
 
@@ -197,17 +156,13 @@ void destroy_entities() {
     rmw_context_t *rmw_context = rcl_context_get_rmw_context(&support.context);
     (void)rmw_uros_set_context_entity_destroy_session_timeout(rmw_context, 0);
     RCSOFTCHECK(rclc_executor_fini(&executor));
-    RCSOFTCHECK(rcl_subscription_fini(&arm_sub, &node));
-    RCSOFTCHECK(rcl_subscription_fini(&hand_sub, &node));
+    RCSOFTCHECK(rcl_subscription_fini(&sub, &node));
 #ifdef USE_PUBLISH
-    RCSOFTCHECK(rcl_publisher_fini(&arm_pub, &node));
-    RCSOFTCHECK(rcl_publisher_fini(&hand_pub, &node));
+    RCSOFTCHECK(rcl_publisher_fini(&pub, &node));
 #endif
-    trajectory_msgs__msg__JointTrajectoryPoint__fini(&arm_msg_sub);
-    trajectory_msgs__msg__JointTrajectoryPoint__fini(&hand_msg_sub);
+    trajectory_msgs__msg__JointTrajectoryPoint__fini(&msg_sub);
 #ifdef USE_PUBLISH
-    trajectory_msgs__msg__JointTrajectoryPoint__fini(&arm_msg_pub);
-    trajectory_msgs__msg__JointTrajectoryPoint__fini(&hand_msg_pub);
+    trajectory_msgs__msg__JointTrajectoryPoint__fini(&msg_pub);
 #endif
     RCSOFTCHECK(rcl_node_fini(&node));
     RCSOFTCHECK(rclc_support_fini(&support));
