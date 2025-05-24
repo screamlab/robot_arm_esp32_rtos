@@ -16,6 +16,9 @@
 
 // Define whether to use mutex lock or not
 #define USE_MUTEX_LOCK  // Comment this line to disable mutex lock
+
+// Define whether to publish the data in the subscription callback
+// #define USE_PUBLISH  // Comment this line to disable publishing in the subscription callback
 ///< End define
 
 #ifndef IS_RIGHT
