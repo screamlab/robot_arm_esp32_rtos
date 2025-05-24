@@ -54,7 +54,7 @@ trajectory_msgs__msg__JointTrajectoryPoint arm_msg_pub, hand_msg_pub;
 #endif
 
 // executor
-rclc_executor_t executor;
+rclc_executor_t arm_executor, hand_executor;
 
 // Global mutex declaration
 #ifdef USE_MUTEX_LOCK
@@ -181,14 +181,18 @@ bool create_entities() {
         HAND_REPUBLISH_TOPIC_NAME));
 #endif
     // Init the executor with the node support
-    executor = rclc_executor_get_zero_initialized_executor();
-    RCCHECK(rclc_executor_init(&executor, &support.context, 2, &allocator));
+    arm_executor = rclc_executor_get_zero_initialized_executor();
+    RCCHECK(rclc_executor_init(&arm_executor, &support.context, 1, &allocator));
 
     // Add the subscription to the executor
-    RCCHECK(rclc_executor_add_subscription(&executor, &arm_sub, &arm_msg_sub,
+    RCCHECK(rclc_executor_add_subscription(&arm_executor, &arm_sub, &arm_msg_sub,
                                            arm_subscription_callback, ON_NEW_DATA));
 
-    RCCHECK(rclc_executor_add_subscription(&executor, &hand_sub, &hand_msg_sub,
+    // Init the executor with the node support
+    hand_executor = rclc_executor_get_zero_initialized_executor();
+    RCCHECK(rclc_executor_init(&hand_executor, &support.context, 1, &allocator));
+
+    RCCHECK(rclc_executor_add_subscription(&hand_executor, &hand_sub, &hand_msg_sub,
                                            hand_subscription_callback, ON_NEW_DATA));
     return true;
 }
@@ -196,7 +200,8 @@ bool create_entities() {
 void destroy_entities() {
     rmw_context_t *rmw_context = rcl_context_get_rmw_context(&support.context);
     (void)rmw_uros_set_context_entity_destroy_session_timeout(rmw_context, 0);
-    RCSOFTCHECK(rclc_executor_fini(&executor));
+    RCSOFTCHECK(rclc_executor_fini(&arm_executor));
+    RCSOFTCHECK(rclc_executor_fini(&hand_executor));
     RCSOFTCHECK(rcl_subscription_fini(&arm_sub, &node));
     RCSOFTCHECK(rcl_subscription_fini(&hand_sub, &node));
 #ifdef USE_PUBLISH
@@ -238,7 +243,8 @@ void microROSTaskFunction(void *parameter) {
             case AGENT_CONNECTED:
                 EXECUTE_EVERY_N_MS(2000, state = (RMW_RET_OK == rmw_uros_ping_agent(20, 1)) ? AGENT_CONNECTED : AGENT_DISCONNECTED;);
                 if (state == AGENT_CONNECTED) {
-                    rclc_executor_spin_some(&executor, RCL_MS_TO_NS(50));
+                    rclc_executor_spin_some(&arm_executor, RCL_MS_TO_NS(4));
+                    rclc_executor_spin_some(&hand_executor, RCL_MS_TO_NS(4));
                 }
                 break;
             case AGENT_DISCONNECTED:
