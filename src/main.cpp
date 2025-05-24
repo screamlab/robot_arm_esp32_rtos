@@ -46,14 +46,15 @@ rcl_node_t node;
 // subscriber
 rcl_subscription_t sub;
 trajectory_msgs__msg__JointTrajectoryPoint msg_sub;
-rclc_executor_t executor_sub;
 
 // publisher
 rcl_publisher_t pub;
 trajectory_msgs__msg__JointTrajectoryPoint msg_pub;
-rclc_executor_t executor_pub;
 rcl_timer_t timer;
 uint64_t timer_timeout = RCL_MS_TO_NS(50);  // Timer period in milliseconds
+
+// executor
+rclc_executor_t executor;
 
 // Global mutex declaration
 #ifdef USE_MUTEX_LOCK
@@ -152,16 +153,12 @@ bool create_entities() {
         REPUBLISH_TOPIC_NAME));
 
     // Init the executor with the node support
-    executor_sub = rclc_executor_get_zero_initialized_executor();
-    RCCHECK(rclc_executor_init(&executor_sub, &support.context, 1, &allocator));
+    executor = rclc_executor_get_zero_initialized_executor();
+    RCCHECK(rclc_executor_init(&executor, &support.context, 2, &allocator));
 
     // Add the subscription to the executor
-    RCCHECK(rclc_executor_add_subscription(&executor_sub, &sub, &msg_sub,
+    RCCHECK(rclc_executor_add_subscription(&executor, &sub, &msg_sub,
                                            subscription_callback, ON_NEW_DATA));
-
-    // Init the executor with the node support
-    executor_pub = rclc_executor_get_zero_initialized_executor();
-    RCCHECK(rclc_executor_init(&executor_pub, &support.context, 1, &allocator));
 
     // Init timer
     RCCHECK(rclc_timer_init_default(
@@ -171,15 +168,14 @@ bool create_entities() {
         timer_callback));
 
     // Add the timer to the executor
-    RCCHECK(rclc_executor_add_timer(&executor_pub, &timer));
+    RCCHECK(rclc_executor_add_timer(&executor, &timer));
     return true;
 }
 
 void destroy_entities() {
     rmw_context_t *rmw_context = rcl_context_get_rmw_context(&support.context);
     (void)rmw_uros_set_context_entity_destroy_session_timeout(rmw_context, 0);
-    RCSOFTCHECK(rclc_executor_fini(&executor_sub));
-    RCSOFTCHECK(rclc_executor_fini(&executor_pub));
+    RCSOFTCHECK(rclc_executor_fini(&executor));
     RCSOFTCHECK(rcl_subscription_fini(&sub, &node));
     RCSOFTCHECK(rcl_publisher_fini(&pub, &node));
     RCSOFTCHECK(rcl_timer_fini(&timer));
@@ -214,8 +210,7 @@ void microROSTaskFunction(void *parameter) {
             case AGENT_CONNECTED:
                 EXECUTE_EVERY_N_MS(2000, state = (RMW_RET_OK == rmw_uros_ping_agent(20, 1)) ? AGENT_CONNECTED : AGENT_DISCONNECTED;);
                 if (state == AGENT_CONNECTED) {
-                    rclc_executor_spin_some(&executor_sub, RCL_MS_TO_NS(4));
-                    rclc_executor_spin_some(&executor_pub, RCL_MS_TO_NS(4));
+                    rclc_executor_spin_some(&executor, RCL_MS_TO_NS(50));
                 }
                 break;
             case AGENT_DISCONNECTED:
